@@ -89,11 +89,7 @@ function setProps(element, props) {
 export function createElement(type, props, ...children) {
   // Handle function components
   if (typeof type === "function") {
-    const result = type(props || {});
-    if (typeof result === "function") {
-      return result();
-    }
-    return result;
+    return type(props || {});
   }
 
   const element = document.createElement(type);
@@ -104,7 +100,7 @@ export function createElement(type, props, ...children) {
     return children.reduce((flat, child) => {
       if (Array.isArray(child)) {
         flat.push(...flattenChildren(child));
-      } else if (child != null && child !== false) {
+      } else if (child != null && child !== false && child !== true) {
         flat.push(child);
       }
       return flat;
@@ -115,24 +111,31 @@ export function createElement(type, props, ...children) {
 
   // Append children
   for (const child of flatChildren) {
-    const node = typeof child === "object" ? child : createTextNode(child);
-
-    element.appendChild(node);
+    if (child instanceof Node) {
+      element.appendChild(child);
+    } else {
+      element.appendChild(createTextNode(child));
+    }
   }
 
   return element;
 }
 
 // Create JSX fragment
-export function Fragment({ children }) {
+export function Fragment(props) {
   const fragment = document.createDocumentFragment();
 
-  if (Array.isArray(children)) {
+  if (props && props.children) {
+    const children = Array.isArray(props.children)
+      ? props.children
+      : [props.children];
     children.forEach((child) => {
       if (child != null) {
-        fragment.appendChild(
-          typeof child === "object" ? child : createTextNode(child)
-        );
+        if (child instanceof Node) {
+          fragment.appendChild(child);
+        } else {
+          fragment.appendChild(createTextNode(child));
+        }
       }
     });
   }
@@ -141,6 +144,6 @@ export function Fragment({ children }) {
 }
 
 // JSX Factory functions
-export const jsx = createElement;
-export const jsxs = createElement;
-export const jsxDEV = createElement;
+export { createElement as jsx };
+export { createElement as jsxs };
+export { createElement as jsxDEV };
