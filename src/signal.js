@@ -51,3 +51,61 @@ export function createEffect(fn) {
 
   execute();
 }
+
+// Create a memoized value
+export function createMemo(fn) {
+  const [value, setValue] = createSignal(undefined);
+
+  // Set up effect to recompute value when dependencies change
+  createEffect(() => {
+    const newValue = fn();
+    setValue(newValue);
+  });
+
+  // Return read-only signal
+  const memo = () => value();
+  memo.isSignal = true;
+  return memo;
+}
+
+// Create a computed property (like Vue's computed)
+export function createComputed(optionsOrFn) {
+  const [value, setValue] = createSignal(undefined);
+
+  // Handle options object with getter/setter
+  if (typeof optionsOrFn === "object") {
+    const { get, set } = optionsOrFn;
+
+    // Set up effect to recompute value when dependencies change
+    createEffect(() => {
+      const newValue = get();
+      setValue(newValue);
+    });
+
+    // Return readable/writable signal
+    const computed = () => value();
+    computed.isSignal = true;
+
+    if (set) {
+      return [
+        computed,
+        (newValue) => {
+          set(newValue);
+        },
+      ];
+    }
+
+    return computed;
+  }
+
+  // Handle function (getter only)
+  createEffect(() => {
+    const newValue = optionsOrFn();
+    setValue(newValue);
+  });
+
+  // Return read-only signal
+  const computed = () => value();
+  computed.isSignal = true;
+  return computed;
+}
