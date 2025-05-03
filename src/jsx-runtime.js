@@ -1,8 +1,12 @@
 import { createEffect } from "./signal.js";
 
-// Check if value is a signal
+// Check if value is a signal or atom getter
 const isSignal = (value) => {
-  return value && typeof value === "function" && value.isSignal === true;
+  return (
+    value &&
+    typeof value === "function" &&
+    (value.isSignal === true || value.toString().includes("atom"))
+  );
 };
 
 // Handle reactive values (signals)
@@ -15,7 +19,6 @@ function createTextNode(value) {
   const node = document.createTextNode("");
 
   if (isSignal(value)) {
-    // Use createEffect to automatically track and update the text content
     createEffect(() => {
       node.textContent = String(value());
     });
@@ -24,6 +27,24 @@ function createTextNode(value) {
   }
 
   return node;
+}
+
+// Handle style object with potential signal values
+function handleStyles(element, styles) {
+  if (!styles) return;
+
+  Object.entries(styles).forEach(([key, value]) => {
+    if (isSignal(value)) {
+      createEffect(() => {
+        element.style[key] = value();
+      });
+    } else if (typeof value === "object" && !Array.isArray(value)) {
+      // Handle nested style objects
+      handleStyles(element, value);
+    } else {
+      element.style[key] = value;
+    }
+  });
 }
 
 // Handle props/attributes
@@ -36,8 +57,15 @@ function setProps(element, props) {
       continue;
     }
 
-    if (key === "style" && typeof value === "object") {
-      Object.assign(element.style, value);
+    if (key === "style") {
+      if (isSignal(value)) {
+        // Handle style object that is itself a signal
+        createEffect(() => {
+          handleStyles(element, resolveValue(value));
+        });
+      } else {
+        handleStyles(element, value);
+      }
       continue;
     }
 
@@ -51,7 +79,7 @@ function setProps(element, props) {
     if (key === "className") {
       if (isSignal(value)) {
         createEffect(() => {
-          element.setAttribute("class", value());
+          element.setAttribute("class", resolveValue(value));
         });
       } else {
         element.setAttribute("class", value);
@@ -62,7 +90,7 @@ function setProps(element, props) {
     // Handle regular attributes
     if (isSignal(value)) {
       createEffect(() => {
-        const val = value();
+        const val = resolveValue(value);
         if (typeof val === "boolean") {
           if (val) {
             element.setAttribute(key, "");
