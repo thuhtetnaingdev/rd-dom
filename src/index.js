@@ -1,5 +1,18 @@
-export { createSignal, createEffect } from "./signal.js";
+export {
+  createSignal,
+  createEffect,
+  createMemo,
+  createComputed,
+} from "./signal.js";
 export { createElement, Fragment, jsx, jsxs, jsxDEV } from "./jsx-runtime.js";
+export {
+  atom,
+  derivedAtom,
+  writableAtom,
+  useAtom,
+  asyncAtom,
+  resetAtoms,
+} from "./atom.js";
 
 // Mount function to render components to DOM
 export function mount(component, container) {

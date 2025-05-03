@@ -1,44 +1,60 @@
-import { createSignal, createEffect, createMemo, createComputed } from '../src/signal.js';
 import { mount } from '../src/index.js';
+import { atom, derivedAtom, writableAtom, useAtom } from '../src/atom.js';
 
-const Counter = () => {
-  const [count, setCount] = createSignal(0);
-  const [firstName, setFirstName] = createSignal("John");
-  const [lastName, setLastName] = createSignal("Doe");
-  
-  // Read-only computed property
-  const fullName = createComputed(() => {
-    return `${firstName()} ${lastName()}`;
-  });
+// Create atoms for our state
+const countAtom = atom(0);
+const firstNameAtom = atom('John');
+const lastNameAtom = atom('Doe');
 
-  // Read-write computed property
-  const [displayName, setDisplayName] = createComputed({
-    get: () => `${fullName()} (Count: ${count()})`,
-    set: (newValue) => {
-      const [first, last] = newValue.split(' ');
-      setFirstName(first);
-      setLastName(last || '');
-    }
-  });
+// Create a derived atom for full name (read-only)
+const fullNameAtom = derivedAtom(
+  [firstNameAtom, lastNameAtom],
+  (firstName, lastName) => `${firstName} ${lastName}`
+);
 
-  // Memoized expensive computation
-  const fibonacci = createMemo(() => {
+// Create a derived atom for double count (read-only)
+const doubleCountAtom = derivedAtom(
+  [countAtom],
+  (count) => count * 2
+);
+
+// Create a writable derived atom for display name
+const displayNameAtom = writableAtom(
+  [fullNameAtom, countAtom],
+  // Read function
+  (fullName, count) => `${fullName} (Count: ${count})`,
+  // Write function
+  (newValue) => {
+    const [first, last] = newValue.split(' ');
+    firstNameAtom.write(first);
+    lastNameAtom.write(last || '');
+  }
+);
+
+// Create a derived atom for fibonacci (with memoization built-in)
+const fibonacciAtom = derivedAtom(
+  [countAtom],
+  (count) => {
     const fib = (n) => {
       if (n <= 1) return n;
       return fib(n - 1) + fib(n - 2);
     };
-    return fib(count());
-  });
+    return fib(count);
+  }
+);
 
-  // Double count using effect
-  const [doubleCount, setDoubleCount] = createSignal(0);
-  createEffect(() => {
-    setDoubleCount(count() * 2);
-  });
+const Counter = () => {
+  const [count, setCount] = useAtom(countAtom);
+  const [firstName, setFirstName] = useAtom(firstNameAtom);
+  const [lastName, setLastName] = useAtom(lastNameAtom);
+  const fullName = useAtom(fullNameAtom);
+  const [displayName, setDisplayName] = useAtom(displayNameAtom);
+  const doubleCount = useAtom(doubleCountAtom);
+  const fibonacci = useAtom(fibonacciAtom);
 
   return (
     <div>
-      <h1>Counter Example with Computed</h1>
+      <h1>Counter Example with Atoms</h1>
       <p>Count: {count}</p>
       <p>Double Count: {doubleCount}</p>
       <p>Fibonacci of Count: {fibonacci}</p>
