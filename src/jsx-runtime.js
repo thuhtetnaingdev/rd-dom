@@ -1,4 +1,4 @@
-import { createEffect } from "./signal.js";
+import { createEffect, createSignal } from "./signal.js";
 
 // Check if value is a signal or atom getter
 const isSignal = (value) => {
@@ -16,14 +16,21 @@ function resolveValue(value) {
 
 // Create text nodes for string/number values
 function createTextNode(value) {
+  if (value instanceof Text) {
+    return value;
+  }
+
   const node = document.createTextNode("");
 
   if (isSignal(value)) {
     createEffect(() => {
-      node.textContent = String(value());
+      const resolvedValue = value();
+      node.textContent = resolvedValue instanceof Text 
+        ? resolvedValue.textContent 
+        : String(resolvedValue ?? "");
     });
   } else {
-    node.textContent = String(value);
+    node.textContent = String(value ?? "");
   }
 
   return node;
@@ -117,7 +124,8 @@ function setProps(element, props) {
 export function createElement(type, props, ...children) {
   // Handle function components
   if (typeof type === "function") {
-    return type(props || {});
+    const result = type(props || {});
+    return result;
   }
 
   const element = document.createElement(type);
@@ -138,13 +146,46 @@ export function createElement(type, props, ...children) {
   const flatChildren = flattenChildren(children);
 
   // Append children
-  for (const child of flatChildren) {
+  flatChildren.forEach(child => {
     if (child instanceof Node) {
       element.appendChild(child);
+    } else if (isSignal(child)) {
+      let placeholders = [];
+      
+      createEffect(() => {
+        // Get current value
+        const value = child();
+        
+        // Remove all previous placeholders
+        placeholders.forEach(placeholder => {
+          if (placeholder.parentNode === element) {
+            element.removeChild(placeholder);
+          }
+        });
+        placeholders = [];
+        
+        // Handle the new value
+        if (Array.isArray(value)) {
+          value.forEach(item => {
+            const node = item instanceof Node 
+              ? item 
+              : document.createTextNode(String(item));
+            element.appendChild(node);
+            placeholders.push(node);
+          });
+        } else if (value instanceof Node) {
+          element.appendChild(value);
+          placeholders.push(value);
+        } else if (value != null) {
+          const textNode = document.createTextNode(String(value));
+          element.appendChild(textNode);
+          placeholders.push(textNode);
+        }
+      });
     } else {
       element.appendChild(createTextNode(child));
     }
-  }
+  });
 
   return element;
 }
@@ -171,134 +212,79 @@ export function Fragment(props) {
   return fragment;
 }
 
-// For component for list rendering (similar to SolidJS)
+// For component implementation
 export function For(props) {
-  // Create container element that will stay in the DOM
-  const container = document.createElement('div');
-  container.style.display = 'contents'; // Make it not affect layout
-  
-  // Extract the render function from props
-  const renderFn = typeof props.children === 'function' 
-    ? props.children 
+  const renderFn = typeof props.children === 'function'
+    ? props.children
     : Array.isArray(props.children) && typeof props.children[0] === 'function'
       ? props.children[0]
-      : (item) => createTextNode(String(item));
+      : (item) => String(item);
+
+  // Create a signal that returns an array of DOM nodes
+  const [nodes, setNodes] = createSignal([]);
   
-  // Store rendered items by key to update efficiently
-  const renderedItems = new Map();
-  
+  // Set up reactivity
   createEffect(() => {
-    // Get the current items array
     const items = resolveValue(props.each) || [];
     
-    // Show fallback if no items
-    if (items.length === 0) {
-      // Clear existing content
-      while (container.firstChild) {
-        container.removeChild(container.firstChild);
-      }
-      
-      // Add fallback if provided
-      if (props.fallback) {
-        container.appendChild(props.fallback);
-      }
+    if (items.length === 0 && props.fallback) {
+      setNodes([props.fallback instanceof Node 
+        ? props.fallback 
+        : document.createTextNode(String(props.fallback))]);
       return;
     }
     
-    // Track keys that are in the current array
-    const currentKeys = new Set();
-    
-    // Track child elements in their correct positions
-    const childElements = [];
-    
-    // Process each item
-    items.forEach((item, index) => {
-      // Use id as key if available, otherwise use index
-      const key = item && item.id !== undefined ? item.id : index;
-      currentKeys.add(key);
-      
-      // Create or update the rendered item
-      if (!renderedItems.has(key)) {
-        // Render a new item
-        try {
-          const rendered = renderFn(item, index);
-          renderedItems.set(key, {
-            node: rendered instanceof Node ? rendered : createTextNode(String(rendered)),
-            item: item
-          });
-        } catch (error) {
-          console.error('Error rendering item:', error);
-          renderedItems.set(key, {
-            node: createTextNode(`[Error rendering item: ${error.message}]`),
-            item: item
-          });
-        }
-      }
-      
-      // Get the rendered node
-      const renderedItem = renderedItems.get(key);
-      childElements.push(renderedItem.node);
-    });
-    
-    // Remove items that are no longer in the array
-    renderedItems.forEach((value, key) => {
-      if (!currentKeys.has(key)) {
-        renderedItems.delete(key);
+    const renderedNodes = items.map((item, index) => {
+      try {
+        const result = renderFn(item, index);
+        return result instanceof Node 
+          ? result 
+          : document.createTextNode(String(result));
+      } catch (error) {
+        console.error("Error in For component:", error);
+        const errorNode = document.createElement('div');
+        errorNode.style.color = 'red';
+        errorNode.textContent = `Error: ${error.message}`;
+        return errorNode;
       }
     });
     
-    // Update the DOM - remove all children then add in correct order
-    while (container.firstChild) {
-      container.removeChild(container.firstChild);
-    }
-    
-    // Add all elements in the correct order
-    childElements.forEach(node => {
-      container.appendChild(node);
-    });
+    setNodes(renderedNodes);
   });
   
-  return container;
+  // Return the signal
+  return nodes;
 }
 
-// Show component for conditional rendering
+// Show component implementation
 export function Show(props) {
-  const container = document.createElement('div');
-  container.style.display = 'contents'; // Make it not affect layout
+  const condition = props.when;
+  const renderContent = typeof props.children === 'function' 
+    ? props.children 
+    : () => props.children;
+  const renderFallback = props.fallback 
+    ? (typeof props.fallback === 'function' ? props.fallback : () => props.fallback)
+    : () => null;
+    
+  const [content, setContent] = createSignal(null);
   
   createEffect(() => {
-    // Clear container
-    while (container.firstChild) {
-      container.removeChild(container.firstChild);
-    }
+    const showContent = resolveValue(condition);
     
-    // Get the condition
-    const condition = resolveValue(props.when);
-    
-    if (condition) {
-      // Show the content
-      const content = typeof props.children === 'function' 
-        ? props.children(condition) 
-        : Array.isArray(props.children) && typeof props.children[0] === 'function'
-          ? props.children[0](condition)
-          : props.children;
-          
-      if (content instanceof Node) {
-        container.appendChild(content);
-      } else if (content != null) {
-        container.appendChild(createTextNode(String(content)));
-      }
-    } else if (props.fallback) {
-      // Show the fallback
-      if (props.fallback instanceof Node) {
-        container.appendChild(props.fallback);
-      } else {
-        container.appendChild(createTextNode(String(props.fallback)));
-      }
+    if (showContent) {
+      const rendered = renderContent(showContent);
+      setContent(rendered instanceof Node 
+        ? rendered 
+        : document.createTextNode(String(rendered)));
+    } else {
+      const fallback = renderFallback();
+      setContent(fallback instanceof Node 
+        ? fallback 
+        : fallback ? document.createTextNode(String(fallback)) : null);
     }
   });
   
-  return container;
+  return content;
 }
 
 // JSX Factory functions

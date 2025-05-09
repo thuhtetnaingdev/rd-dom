@@ -1,5 +1,5 @@
 import { createSignal, createEffect } from "../src/signal.js";
-import { atom, useAtom } from "../src/index.js";
+import { atom, useAtom, For } from "../src/index.js";
 
 // Todo atom to store todos
 const todoAtom = atom([
@@ -45,44 +45,21 @@ const TodoItem = ({ todo, onToggle, onDelete }) => (
 );
 
 const TodoList = ({ todos, onToggle, onDelete }) => {
-  // Create a wrapper that will hold our list
-  const listContainer = document.createElement('ul');
-  listContainer.className = 'space-y-3';
-  
-  // Render function to update the list contents
-  const renderList = () => {
-    // Clear the list
-    listContainer.innerHTML = '';
-    
-    // Get current todos
-    const currentTodos = todos();
-    
-    if (!currentTodos || currentTodos.length === 0) {
-      const fallback = document.createElement('div');
-      fallback.className = 'text-gray-500 text-center';
-      fallback.textContent = 'No todos yet. Add one above!';
-      listContainer.appendChild(fallback);
-      return;
-    }
-    
-    // Add each todo item
-    currentTodos.forEach(todo => {
-      const item = <TodoItem 
-        todo={todo} 
-        onToggle={onToggle} 
-        onDelete={onDelete} 
-      />;
-      listContainer.appendChild(item);
-    });
-  };
-  
-  // Initial render
-  renderList();
-  
-  // Set up reactivity for updates
-  createEffect(renderList);
-  
-  return listContainer;
+  return (
+    <ul class="space-y-3">
+      <For 
+        each={todos}
+        fallback={<div class="text-gray-500 text-center">No todos yet. Add one above!</div>}
+        children={(todo) => (
+          <TodoItem 
+            todo={todo} 
+            onToggle={onToggle} 
+            onDelete={onDelete} 
+          />
+        )}
+      />
+    </ul>
+  );
 };
 
 export const App = () => {
