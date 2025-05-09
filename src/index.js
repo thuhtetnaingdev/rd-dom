@@ -4,7 +4,8 @@ export {
   createMemo,
   createComputed,
 } from "./signal.js";
-export { createElement, Fragment, jsx, jsxs, jsxDEV } from "./jsx-runtime.js";
+export { createElement, Fragment, jsx, jsxs, jsxDEV, Show } from "./jsx-runtime.js";
+export { For, ForList, createForRenderer } from "./list.js";
 export {
   atom,
   derivedAtom,
